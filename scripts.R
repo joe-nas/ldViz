@@ -89,16 +89,27 @@ analysis <- function(snp,populations){
   target.snp <- GRanges(Rle(gsub("ch","chr",as.character(seqnames(target.snp)))),
                         IRanges(start = start(target.snp),end = end(target.snp)))
   target.region <- targetRegion(target.snp)
+  target.region.fname <- sprintf("%s:%s-%s_",gsub("chr","",seqnames(target.region)), 
+                                  start(target.region),end(target.region))
   pop <- llply(populations, function(p){
-    response <- system(vcfxtract(target.region,p),intern = T)
-    data.files <- regmatches(response,gregexpr("\\d+:\\d+-\\d+_\\w{3}\\.{1}(ped|info)",response,perl = T))[[1]]
+    if(!file.exists(sprintf("%s%s.ped",target.region.fname,p))){
+      cat("downloading\n")
+      response <- system(vcfxtract(target.region,p),intern = T)
+      data.files <- regmatches(response,gregexpr("\\d+:\\d+-\\d+_\\w{3}\\.{1}(ped|info)",response,perl = T))[[1]]
+    }else{
+      cat("file exists\n")
+      data.files <- c(sprintf("%s%s.info",target.region.fname,p),sprintf("%s%s.ped",target.region.fname,p))
+    }
     dat <- read.pedfile(data.files[2], snps = data.files[1])
     pop <- ld.analysis(dat,target.snp)
     mycols <- pop$R.squared >= 0.75
     mycols[which(mycols == T)] <- "red"
     mycols[which(mycols == F)] <- "black"
     pop$mycols <- mycols
-    ggplot(pop) + ylim(c(0,1)) + geom_point(aes(position,round(D.prime,digits = 2),size = R.squared,fill = mycols,colour = mycols), alpha = 0.2) + scale_color_manual(values = c("black","black","red")) + geom_vline(xintercept = start(target.snp)) + geom_text(x=start(target.snp),y=0.5, label=snp)  },.parallel = T)
+    ggplot(pop) + ylim(c(0,1)) + geom_point(aes(position,round(D.prime,digits = 2),size = R.squared,fill = mycols,colour = mycols), alpha = 0.2) + scale_color_manual(values = c("black","black","red")) + geom_vline(xintercept = start(target.snp)) + geom_text(x=start(target.snp),y=0.5, label=snp)  
+    }, .parallel = F)
+    
+    
   names(pop) <- populations
   txs <- txdbCollapse(TxDb.Hsapiens.UCSC.hg38.knownGene,
                       tr = target.region)
